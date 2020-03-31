@@ -154,7 +154,30 @@ inline ThreadPool::~ThreadPool()
     condition_consumers.notify_all();
     condition_producers.notify_all();
     pool_size = 0;
-    condition_consumers.wait(lock, [this]{ return this->workers.empty(); });
+    condition_consumers.wait(lock,
+        [this]
+        {
+            //return this->workers.empty();
+            if (this->workers.empty()) {
+                return true;
+            }
+            else {
+#ifdef _WIN32
+                for (std::vector< std::thread >::reverse_iterator i = this->workers.rbegin(); i < this->workers.rend(); ++i) {
+                    HANDLE hThread = i->native_handle();
+                    if (WaitForSingleObject(hThread, 0) != WAIT_OBJECT_0) {
+                        return false;
+                    }
+                }
+                for (std::vector< std::thread >::reverse_iterator i = this->workers.rbegin(); i < this->workers.rend(); ++i) {
+                    i->detach();
+                }
+                return true;
+#else
+                return false;
+#endif
+            }
+        });
     assert(in_flight == 0);
 }
 
